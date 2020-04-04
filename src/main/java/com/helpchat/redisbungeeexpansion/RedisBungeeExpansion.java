@@ -31,7 +31,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
 
     private BukkitTask task;
 
-    private final String CHANNEL = "RedisBungee";
+    private final String CHANNEL = "legacy:redisbungee";
 
     private int fetchInterval = 60;
 
