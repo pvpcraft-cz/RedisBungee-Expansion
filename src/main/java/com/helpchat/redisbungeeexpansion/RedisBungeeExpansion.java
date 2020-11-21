@@ -33,19 +33,26 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
 
     private BukkitTask task;
 
-    private final String CHANNEL = "legacy:redisbungee";
+    private final static String REDIS_CHANNEL = "legacy:redisbungee";
+    private final static String STATUS_CHANNEL = "me:serverstatus";
 
     public RedisBungeeExpansion() {
-        if (Bukkit.getMessenger().isIncomingChannelRegistered(getPlaceholderAPI(), CHANNEL)) {
-            Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), CHANNEL);
+        registerChannel(REDIS_CHANNEL);
+        registerChannel(STATUS_CHANNEL);
+    }
+
+    private void registerChannel(String channel) {
+        if (Bukkit.getMessenger().isIncomingChannelRegistered(getPlaceholderAPI(), channel)) {
+            Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), channel);
         }
 
-        if (Bukkit.getMessenger().isOutgoingChannelRegistered(getPlaceholderAPI(), CHANNEL)) {
-            Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), CHANNEL);
+        if (Bukkit.getMessenger().isOutgoingChannelRegistered(getPlaceholderAPI(), channel)) {
+            Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), channel);
         }
 
-        Bukkit.getMessenger().registerOutgoingPluginChannel(getPlaceholderAPI(), CHANNEL);
-        Bukkit.getMessenger().registerIncomingPluginChannel(getPlaceholderAPI(), CHANNEL, this);
+        Bukkit.getMessenger().registerOutgoingPluginChannel(getPlaceholderAPI(), channel);
+        Bukkit.getMessenger().registerIncomingPluginChannel(getPlaceholderAPI(), channel, this);
+        Bukkit.getLogger().info("Registered channel " + channel);
     }
 
     @Override
@@ -104,7 +111,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         try {
             out.writeUTF("PlayerCount");
             out.writeUTF(server);
-            Bukkit.getOnlinePlayers().iterator().next().sendPluginMessage(getPlaceholderAPI(), CHANNEL, out.toByteArray());
+            Bukkit.getOnlinePlayers().iterator().next().sendPluginMessage(getPlaceholderAPI(), REDIS_CHANNEL, out.toByteArray());
         } catch (Exception ignored) {
         }
     }
@@ -116,7 +123,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         try {
             out.writeUTF("ServerStatus");
             out.writeUTF(server);
-            Bukkit.getServer().sendPluginMessage(getPlaceholderAPI(), CHANNEL, out.toByteArray());
+            Bukkit.getServer().sendPluginMessage(getPlaceholderAPI(), STATUS_CHANNEL, out.toByteArray());
         } catch (Exception ignored) {
         }
     }
@@ -147,7 +154,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         return "invalid_server";
     }
 
-    private void update() {
+    private void sendUpdateRequests() {
         sendPlayerCountRequest("ALL");
 
         for (String server : serverInfo.keySet()) {
@@ -161,7 +168,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         this.task = new BukkitRunnable() {
             @Override
             public void run() {
-                update();
+                sendUpdateRequests();
             }
         }.runTaskTimer(getPlaceholderAPI(), 100L, 20L * FETCH_INTERVAL);
     }
@@ -181,15 +188,26 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
     public void clear() {
         serverInfo.clear();
         if (isRegistered()) {
-            Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), CHANNEL);
-            Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), CHANNEL, this);
+            unregisterChannel(REDIS_CHANNEL);
+            unregisterChannel(STATUS_CHANNEL);
         }
+    }
+
+    private void unregisterChannel(String channel) {
+        if (Bukkit.getMessenger().isIncomingChannelRegistered(getPlaceholderAPI(), channel)) {
+            Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), channel);
+        }
+
+        if (Bukkit.getMessenger().isOutgoingChannelRegistered(getPlaceholderAPI(), channel)) {
+            Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), channel);
+        }
+        Bukkit.getLogger().info("Unregistered channel " + channel);
     }
 
     @Override
     public void onPluginMessageReceived(String channel, @NotNull Player player, byte[] message) {
 
-        if (!channel.equals(CHANNEL)) {
+        if (!channel.equals(REDIS_CHANNEL) && !channel.equals(STATUS_CHANNEL)) {
             return;
         }
 
