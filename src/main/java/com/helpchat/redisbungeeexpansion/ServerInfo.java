@@ -13,7 +13,7 @@ public class ServerInfo {
     private int playerCount;
     @Getter
     @Setter
-    private boolean state;
+    private boolean online;
 
     public ServerInfo(String server) {
         this.server = server;

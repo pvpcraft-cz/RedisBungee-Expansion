@@ -7,7 +7,6 @@ import me.clip.placeholderapi.expansion.Configurable;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import me.clip.placeholderapi.expansion.Taskable;
 import org.bukkit.Bukkit;
-import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -84,6 +83,16 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         return defaults;
     }
 
+    private ServerInfo getServer(String server) {
+        return this.serverInfo.containsKey(server) ? this.serverInfo.get(server) : createServer(server);
+    }
+
+    private ServerInfo createServer(String server) {
+        ServerInfo serverInfo = new ServerInfo(server);
+        this.serverInfo.put(server, serverInfo);
+        return serverInfo;
+    }
+
     private void sendPlayerCountRequest(String server) {
 
         if (Bukkit.getOnlinePlayers().isEmpty()) {
@@ -112,48 +121,47 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         }
     }
 
-    @Override
-    public String onRequest(OfflinePlayer player, @NotNull String params) {
-
-        if (params.equalsIgnoreCase("total") || params.equalsIgnoreCase("all")) {
-            return String.valueOf(total);
-        }
-
-        if (serverInfo.containsKey(params)) {
-            return String.valueOf(serverInfo.get(params));
-        }
-
-        serverInfo.put(params, 0);
-        return "invalid_server";
-    }
+    /*
+     * %identifier_count/status_server%
+     * */
 
     @Override
     public String onPlaceholderRequest(Player player, String params) {
 
-        if (params.equalsIgnoreCase("total") || params.equalsIgnoreCase("all")) {
-            return String.valueOf(total);
+        String[] args = params.split("_");
+
+        if (args.length < 2) {
+            return "not_enough_args";
         }
 
-        if (serverInfo.containsKey(params)) {
-            return String.valueOf(serverInfo.get(params));
-        }
+        String server = args[1];
 
-        serverInfo.put(params, 0);
+        if (args[0].equalsIgnoreCase("status")) {
+            return getServer(server).isOnline() ? "yes" : "no";
+        } else if (args[0].equalsIgnoreCase("count")) {
+            if (server.equalsIgnoreCase("total") || server.equalsIgnoreCase("all")) {
+                return String.valueOf(total);
+            } else
+                return String.valueOf(getServer(server).getPlayerCount());
+        }
         return "invalid_server";
     }
 
+    private void update() {
+        sendPlayerCountRequest("ALL");
+
+        for (String server : serverInfo.keySet()) {
+            sendPlayerCountRequest(server);
+            sendServerStatusRequest(server);
+        }
+    }
 
     @Override
     public void start() {
         this.task = new BukkitRunnable() {
             @Override
             public void run() {
-                sendPlayerCountRequest("ALL");
-
-                for (String server : serverInfo.keySet()) {
-                    sendPlayerCountRequest(server);
-                    sendServerStatusRequest(server);
-                }
+                update();
             }
         }.runTaskTimer(getPlaceholderAPI(), 100L, 20L * FETCH_INTERVAL);
     }
@@ -199,7 +207,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
                     if (server.equals("ALL")) {
                         total = count;
                     } else {
-                        serverInfo.put(server, count);
+                        getServer(server).setPlayerCount(count);
                     }
                 }
             } else if (subChannel.equals("GetServers")) {
@@ -210,16 +218,15 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
                 }
 
                 for (String server : serverList) {
-                    if (!serverInfo.containsKey(server)) {
-                        serverInfo.put(server, 0);
-                    }
+                    if (!serverInfo.containsKey(server))
+                        createServer(server);
                 }
             } else if (subChannel.equals("ServerStatus")) {
                 String server = inputStream.readUTF();
 
                 if (inputStream.available() > 0) {
                     boolean state = inputStream.readBoolean();
-                    serverStatuses.put(server, state);
+                    getServer(server).setOnline(state);
                 }
             }
         } catch (Exception ignored) {
