@@ -2,30 +2,33 @@ package com.helpchat.redisbungeeexpansion;
 
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
-import me.clip.placeholderapi.PlaceholderAPI;
 import me.clip.placeholderapi.expansion.Cacheable;
 import me.clip.placeholderapi.expansion.Configurable;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import me.clip.placeholderapi.expansion.Taskable;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class RedisBungeeExpansion extends PlaceholderExpansion implements PluginMessageListener, Taskable, Cacheable, Configurable {
 
-    private final Map<String, Integer> servers = new ConcurrentHashMap<>();
+    private static final String VERSION = "3.0.0";
+
+    private static final int FETCH_INTERVAL = 60;
+
+    private final Map<String, ServerInfo> serverInfo = new ConcurrentHashMap<>();
 
     private int total = 0;
 
@@ -33,35 +36,29 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
 
     private final String CHANNEL = "legacy:redisbungee";
 
-    private int fetchInterval = 60;
-
-    private boolean registered = false;
-
     public RedisBungeeExpansion() {
-        if (!registered) {
-            Bukkit.getMessenger().registerOutgoingPluginChannel(getPlaceholderAPI(), CHANNEL);
-            Bukkit.getMessenger().registerIncomingPluginChannel(getPlaceholderAPI(), CHANNEL, this);
-            registered = true;
+        if (Bukkit.getMessenger().isIncomingChannelRegistered(getPlaceholderAPI(), CHANNEL)) {
+            Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), CHANNEL);
         }
+
+        if (Bukkit.getMessenger().isOutgoingChannelRegistered(getPlaceholderAPI(), CHANNEL)) {
+            Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), CHANNEL);
+        }
+
+        Bukkit.getMessenger().registerOutgoingPluginChannel(getPlaceholderAPI(), CHANNEL);
+        Bukkit.getMessenger().registerIncomingPluginChannel(getPlaceholderAPI(), CHANNEL, this);
     }
 
     @Override
     public boolean register() {
-
-        List<String> srvs = getStringList("tracked_servers");
-
-        if (srvs != null && !srvs.isEmpty()) {
-            for (String s : srvs) {
-                servers.put(s, 0);
-            }
-        }
-
-        return PlaceholderAPI.registerPlaceholderHook("redisbungee", this);
+        List<String> servers = getStringList("tracked_servers");
+        servers.forEach(server -> this.serverInfo.put(server, new ServerInfo(server)));
+        return super.register();
     }
 
     @Override
     public String getIdentifier() {
-        return "redisbungee";
+        return "newredisbungee";
     }
 
     @Override
@@ -71,23 +68,23 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
 
     @Override
     public String getAuthor() {
-        return "clip";
+        return "qwz";
     }
 
     @Override
     public String getVersion() {
-        return "1.0.1";
+        return VERSION;
     }
 
     @Override
     public Map<String, Object> getDefaults() {
         final Map<String, Object> defaults = new HashMap<>();
         defaults.put("check_interval", 30);
-        defaults.put("tracked_servers", Arrays.asList("Hub", "Survival"));
+        defaults.put("tracked_servers", Arrays.asList("lobby", "survival", "skyblock", "pit"));
         return defaults;
     }
 
-    private void getPlayers(String server) {
+    private void sendPlayerCountRequest(String server) {
 
         if (Bukkit.getOnlinePlayers().isEmpty()) {
             return;
@@ -96,64 +93,69 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         ByteArrayDataOutput out = ByteStreams.newDataOutput();
 
         try {
-
             out.writeUTF("PlayerCount");
-
             out.writeUTF(server);
-
             Bukkit.getOnlinePlayers().iterator().next().sendPluginMessage(getPlaceholderAPI(), CHANNEL, out.toByteArray());
+        } catch (Exception ignored) {
+        }
+    }
 
+    private void sendServerStatusRequest(String server) {
+
+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+
+        try {
+            out.writeUTF("ServerStatus");
+            out.writeUTF(server);
+            Bukkit.getServer().sendPluginMessage(getPlaceholderAPI(), CHANNEL, out.toByteArray());
         } catch (Exception ignored) {
         }
     }
 
     @Override
-    public String onPlaceholderRequest(Player p, String identifier) {
+    public String onRequest(OfflinePlayer player, @NotNull String params) {
 
-
-        if (identifier.equalsIgnoreCase("total") || identifier.equalsIgnoreCase("all")) {
+        if (params.equalsIgnoreCase("total") || params.equalsIgnoreCase("all")) {
             return String.valueOf(total);
         }
 
-        if (servers.isEmpty()) {
-            servers.put(identifier, 0);
-            return "0";
+        if (serverInfo.containsKey(params)) {
+            return String.valueOf(serverInfo.get(params));
         }
 
-        for (Map.Entry<String, Integer> entry : servers.entrySet()) {
-            if (entry.getKey().equalsIgnoreCase(identifier)) {
-                return String.valueOf(entry.getValue());
-            }
+        serverInfo.put(params, 0);
+        return "invalid_server";
+    }
+
+    @Override
+    public String onPlaceholderRequest(Player player, String params) {
+
+        if (params.equalsIgnoreCase("total") || params.equalsIgnoreCase("all")) {
+            return String.valueOf(total);
         }
 
-        servers.put(identifier, 0);
-        return null;
+        if (serverInfo.containsKey(params)) {
+            return String.valueOf(serverInfo.get(params));
+        }
 
+        serverInfo.put(params, 0);
+        return "invalid_server";
     }
 
 
     @Override
     public void start() {
-
-        task = new BukkitRunnable() {
-
+        this.task = new BukkitRunnable() {
             @Override
             public void run() {
+                sendPlayerCountRequest("ALL");
 
-                if (servers.isEmpty()) {
-
-                    getPlayers("ALL");
-
-                    return;
+                for (String server : serverInfo.keySet()) {
+                    sendPlayerCountRequest(server);
+                    sendServerStatusRequest(server);
                 }
-
-                for (String server : servers.keySet()) {
-                    getPlayers(server);
-                }
-
-                getPlayers("ALL");
             }
-        }.runTaskTimer(getPlaceholderAPI(), 100L, 20L*fetchInterval);
+        }.runTaskTimer(getPlaceholderAPI(), 100L, 20L * FETCH_INTERVAL);
     }
 
     @Override
@@ -161,7 +163,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         if (task != null) {
             try {
                 task.cancel();
-            } catch (Exception ex) {
+            } catch (Exception ignored) {
             }
             task = null;
         }
@@ -169,60 +171,58 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
 
     @Override
     public void clear() {
-        servers.clear();
-        if (registered) {
+        serverInfo.clear();
+        if (isRegistered()) {
             Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), CHANNEL);
             Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), CHANNEL, this);
-            registered = false;
         }
     }
 
     @Override
-    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
+    public void onPluginMessageReceived(String channel, @NotNull Player player, byte[] message) {
 
         if (!channel.equals(CHANNEL)) {
             return;
         }
 
-        DataInputStream in = new DataInputStream(new ByteArrayInputStream(message));
+        DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(message));
 
         try {
-
-            String subChannel = in.readUTF();
+            String subChannel = inputStream.readUTF();
 
             if (subChannel.equals("PlayerCount")) {
+                String server = inputStream.readUTF();
 
-                String server = in.readUTF();
-
-                if (in.available() > 0) {
-
-                    int count = in.readInt();
+                if (inputStream.available() > 0) {
+                    int count = inputStream.readInt();
 
                     if (server.equals("ALL")) {
                         total = count;
                     } else {
-                        servers.put(server, count);
+                        serverInfo.put(server, count);
                     }
                 }
-
-
             } else if (subChannel.equals("GetServers")) {
-
-                String[] serverList = in.readUTF().split(", ");
+                String[] serverList = inputStream.readUTF().split(", ");
 
                 if (serverList.length == 0) {
                     return;
                 }
 
                 for (String server : serverList) {
-
-                    if (!servers.containsKey(server)) {
-                        servers.put(server, 0);
+                    if (!serverInfo.containsKey(server)) {
+                        serverInfo.put(server, 0);
                     }
                 }
-            }
+            } else if (subChannel.equals("ServerStatus")) {
+                String server = inputStream.readUTF();
 
-        } catch (Exception e) {
+                if (inputStream.available() > 0) {
+                    boolean state = inputStream.readBoolean();
+                    serverStatuses.put(server, state);
+                }
+            }
+        } catch (Exception ignored) {
         }
     }
 }
