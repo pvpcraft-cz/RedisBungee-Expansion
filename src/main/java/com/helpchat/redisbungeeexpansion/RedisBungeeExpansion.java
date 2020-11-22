@@ -8,6 +8,7 @@ import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import me.clip.placeholderapi.expansion.Taskable;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.event.Listener;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.scheduler.BukkitTask;
@@ -21,9 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class RedisBungeeExpansion extends PlaceholderExpansion implements PluginMessageListener, Taskable, Cacheable, Configurable {
+public final class RedisBungeeExpansion extends PlaceholderExpansion implements PluginMessageListener, Taskable, Cacheable, Configurable, Listener {
 
-    private static final String VERSION = "3.0.0";
+    private static final String VERSION = "3.1.0";
 
     private static final int FETCH_INTERVAL = 60;
 
@@ -34,11 +35,12 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
     private BukkitTask task;
 
     private final static String REDIS_CHANNEL = "legacy:redisbungee";
-    private final static String STATUS_CHANNEL = "me:serverstatus";
+
+    private ServerStatusListener serverStatus;
 
     public RedisBungeeExpansion() {
+        this.serverStatus = new ServerStatusListener(this);
         registerChannel(REDIS_CHANNEL);
-        registerChannel(STATUS_CHANNEL);
     }
 
     private void registerChannel(String channel) {
@@ -90,7 +92,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         return defaults;
     }
 
-    private ServerInfo getServer(String server) {
+    public ServerInfo getServer(String server) {
         return this.serverInfo.containsKey(server) ? this.serverInfo.get(server) : createServer(server);
     }
 
@@ -112,18 +114,6 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
             out.writeUTF("PlayerCount");
             out.writeUTF(server);
             Bukkit.getOnlinePlayers().iterator().next().sendPluginMessage(getPlaceholderAPI(), REDIS_CHANNEL, out.toByteArray());
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void sendServerStatusRequest(String server) {
-
-        ByteArrayDataOutput out = ByteStreams.newDataOutput();
-
-        try {
-            out.writeUTF("ServerStatus");
-            out.writeUTF(server);
-            Bukkit.getServer().sendPluginMessage(getPlaceholderAPI(), STATUS_CHANNEL, out.toByteArray());
         } catch (Exception ignored) {
         }
     }
@@ -159,7 +149,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
 
         for (String server : serverInfo.keySet()) {
             sendPlayerCountRequest(server);
-            sendServerStatusRequest(server);
+            serverStatus.sendServerStatusRequest(server);
         }
     }
 
@@ -189,7 +179,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         serverInfo.clear();
         if (isRegistered()) {
             unregisterChannel(REDIS_CHANNEL);
-            unregisterChannel(STATUS_CHANNEL);
+            serverStatus.unregisterChannel();
         }
     }
 
@@ -205,9 +195,9 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
     }
 
     @Override
-    public void onPluginMessageReceived(String channel, @NotNull Player player, byte[] message) {
+    public synchronized void onPluginMessageReceived(String channel, @NotNull Player player, byte[] message) {
 
-        if (!channel.equals(REDIS_CHANNEL) && !channel.equals(STATUS_CHANNEL)) {
+        if (!channel.equals(REDIS_CHANNEL)) {
             return;
         }
 
@@ -238,13 +228,6 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
                 for (String server : serverList) {
                     if (!serverInfo.containsKey(server))
                         createServer(server);
-                }
-            } else if (subChannel.equals("ServerStatus")) {
-                String server = inputStream.readUTF();
-
-                if (inputStream.available() > 0) {
-                    boolean state = inputStream.readBoolean();
-                    getServer(server).setOnline(state);
                 }
             }
         } catch (Exception ignored) {
