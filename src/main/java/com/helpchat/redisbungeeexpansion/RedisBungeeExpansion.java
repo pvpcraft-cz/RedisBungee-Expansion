@@ -36,7 +36,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
 
     private final static String REDIS_CHANNEL = "legacy:redisbungee";
 
-    private ServerStatusListener serverStatus;
+    private final ServerStatusListener serverStatus;
 
     public RedisBungeeExpansion() {
         this.serverStatus = new ServerStatusListener(this);
@@ -80,7 +80,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
     }
 
     @Override
-    public String getVersion() {
+    public @NotNull String getVersion() {
         return VERSION;
     }
 
@@ -102,6 +102,7 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
         return serverInfo;
     }
 
+    @SuppressWarnings("UnstableApiUsage")
     private void sendPlayerCountRequest(String server) {
 
         if (Bukkit.getOnlinePlayers().isEmpty()) {

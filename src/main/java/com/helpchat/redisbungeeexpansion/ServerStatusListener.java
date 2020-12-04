@@ -25,6 +25,7 @@ public class ServerStatusListener implements PluginMessageListener {
         registerChannel(STATUS_CHANNEL);
     }
 
+    @SuppressWarnings("UnstableApiUsage")
     public void sendServerStatusRequest(String server) {
 
         ByteArrayDataOutput out = ByteStreams.newDataOutput();
@@ -33,11 +34,11 @@ public class ServerStatusListener implements PluginMessageListener {
             out.writeUTF("ServerStatus");
             out.writeUTF(server);
             Bukkit.getServer().sendPluginMessage(plugin, STATUS_CHANNEL, out.toByteArray());
-            Bukkit.getLogger().info("Sent status request for " + server);
         } catch (Exception ignored) {
         }
     }
 
+    @SuppressWarnings("UnstableApiUsage")
     @Override
     public void onPluginMessageReceived(String channel, @NotNull Player player, byte[] message) {
 
@@ -54,7 +55,6 @@ public class ServerStatusListener implements PluginMessageListener {
                 String server = inputStream.readUTF();
 
                 boolean state = inputStream.readBoolean();
-                Bukkit.getLogger().info("Received status message for " + server + " state: " + state);
                 expansion.getServer(server).setOnline(state);
             }
         } catch (Exception e) {
