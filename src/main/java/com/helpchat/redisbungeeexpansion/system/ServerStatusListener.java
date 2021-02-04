@@ -1,8 +1,11 @@
-package com.helpchat.redisbungeeexpansion;
+package com.helpchat.redisbungeeexpansion.system;
 
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
+import com.helpchat.redisbungeeexpansion.RedisBungeeExpansion;
+import com.helpchat.redisbungeeexpansion.RedisUtil;
+import com.helpchat.redisbungeeexpansion.struct.ServerInfo;
 import me.clip.placeholderapi.PlaceholderAPIPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -23,11 +26,11 @@ public class ServerStatusListener implements PluginMessageListener {
     }
 
     public void register() {
-        Util.registerChannel(plugin, STATUS_CHANNEL, this);
+        RedisUtil.registerChannel(plugin, STATUS_CHANNEL, this);
     }
 
     public void unregister() {
-        Util.unregisterChannel(plugin, ServerStatusListener.STATUS_CHANNEL);
+        RedisUtil.unregisterChannel(plugin, ServerStatusListener.STATUS_CHANNEL);
     }
 
     @SuppressWarnings("UnstableApiUsage")

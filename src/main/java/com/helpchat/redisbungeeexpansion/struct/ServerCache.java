@@ -1,4 +1,4 @@
-package com.helpchat.redisbungeeexpansion;
+package com.helpchat.redisbungeeexpansion.struct;
 
 import java.util.Collections;
 import java.util.HashSet;

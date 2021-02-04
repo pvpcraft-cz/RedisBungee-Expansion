@@ -7,7 +7,7 @@ import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.bukkit.plugin.messaging.PluginMessageListenerRegistration;
 
 @UtilityClass
-public class Util {
+public class RedisUtil {
 
     public void registerChannel(JavaPlugin plugin, String channel, PluginMessageListener listener) {
         if (Bukkit.getMessenger().isIncomingChannelRegistered(plugin, channel)) {

@@ -1,4 +1,4 @@
-package com.helpchat.redisbungeeexpansion;
+package com.helpchat.redisbungeeexpansion.struct;
 
 import lombok.Getter;
 import lombok.Setter;

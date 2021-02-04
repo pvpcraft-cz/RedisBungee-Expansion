@@ -1,5 +1,8 @@
-package com.helpchat.redisbungeeexpansion;
+package com.helpchat.redisbungeeexpansion.system;
 
+import com.helpchat.redisbungeeexpansion.RedisBungeeExpansion;
+import com.helpchat.redisbungeeexpansion.struct.ServerCache;
+import com.helpchat.redisbungeeexpansion.struct.ServerInfo;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitTask;

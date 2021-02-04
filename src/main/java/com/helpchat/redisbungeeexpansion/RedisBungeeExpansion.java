@@ -1,5 +1,7 @@
 package com.helpchat.redisbungeeexpansion;
 
+import com.helpchat.redisbungeeexpansion.struct.ServerInfo;
+import com.helpchat.redisbungeeexpansion.system.RedisManager;
 import lombok.Getter;
 import me.clip.placeholderapi.expansion.Cacheable;
 import me.clip.placeholderapi.expansion.Configurable;
@@ -14,7 +16,7 @@ import java.util.Map;
 
 public final class RedisBungeeExpansion extends PlaceholderExpansion implements Configurable, Cacheable, Taskable {
 
-    private static final String VERSION = "3.1.2";
+    private static final String VERSION = "4.0.0";
 
     @Getter
     private final RedisManager redisManager = new RedisManager(this);
