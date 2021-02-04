@@ -3,10 +3,12 @@ package com.helpchat.redisbungeeexpansion;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Objects;
+
 public class ServerInfo {
 
     @Getter
-    private final String server;
+    private final String name;
 
     @Getter
     @Setter
@@ -15,7 +17,29 @@ public class ServerInfo {
     @Setter
     private boolean online;
 
-    public ServerInfo(String server) {
-        this.server = server;
+    @Getter
+    @Setter
+    private boolean tracked = false;
+
+    public ServerInfo(String name) {
+        this.name = name;
+    }
+
+    public ServerInfo(String name, boolean tracked) {
+        this.name = name;
+        this.tracked = tracked;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ServerInfo)) return false;
+        ServerInfo that = (ServerInfo) o;
+        return Objects.equals(name, that.name);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(name);
     }
 }

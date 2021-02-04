@@ -1,66 +1,30 @@
 package com.helpchat.redisbungeeexpansion;
 
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
+import lombok.Getter;
 import me.clip.placeholderapi.expansion.Cacheable;
 import me.clip.placeholderapi.expansion.Configurable;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import me.clip.placeholderapi.expansion.Taskable;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.event.Listener;
-import org.bukkit.plugin.messaging.PluginMessageListener;
-import org.bukkit.scheduler.BukkitRunnable;
-import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
-public final class RedisBungeeExpansion extends PlaceholderExpansion implements PluginMessageListener, Taskable, Cacheable, Configurable, Listener {
+public final class RedisBungeeExpansion extends PlaceholderExpansion implements Configurable, Cacheable, Taskable {
 
-    private static final String VERSION = "3.1.0";
+    private static final String VERSION = "3.1.2";
 
-    private static final int FETCH_INTERVAL = 60;
-
-    private final Map<String, ServerInfo> serverInfo = new ConcurrentHashMap<>();
-
-    private int total = 0;
-
-    private BukkitTask task;
-
-    private final static String REDIS_CHANNEL = "legacy:redisbungee";
-
-    private final ServerStatusListener serverStatus;
+    @Getter
+    private final RedisManager redisManager = new RedisManager(this);
 
     public RedisBungeeExpansion() {
-        this.serverStatus = new ServerStatusListener(this);
-        registerChannel(REDIS_CHANNEL);
-    }
-
-    private void registerChannel(String channel) {
-        if (Bukkit.getMessenger().isIncomingChannelRegistered(getPlaceholderAPI(), channel)) {
-            Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), channel);
-        }
-
-        if (Bukkit.getMessenger().isOutgoingChannelRegistered(getPlaceholderAPI(), channel)) {
-            Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), channel);
-        }
-
-        Bukkit.getMessenger().registerOutgoingPluginChannel(getPlaceholderAPI(), channel);
-        Bukkit.getMessenger().registerIncomingPluginChannel(getPlaceholderAPI(), channel, this);
-        Bukkit.getLogger().info("Registered channel " + channel);
     }
 
     @Override
     public boolean register() {
-        List<String> servers = getStringList("tracked_servers");
-        servers.forEach(server -> this.serverInfo.put(server, new ServerInfo(server)));
+        redisManager.setup();
         return super.register();
     }
 
@@ -87,151 +51,65 @@ public final class RedisBungeeExpansion extends PlaceholderExpansion implements 
     @Override
     public Map<String, Object> getDefaults() {
         final Map<String, Object> defaults = new HashMap<>();
-        defaults.put("check_interval", 30);
-        defaults.put("tracked_servers", Arrays.asList("lobby", "survival", "skyblock", "pit"));
+
+        defaults.put("check-interval", 30);
+        defaults.put("tracked-servers", Arrays.asList("lobby", "survival"));
+
+        // Redis settings
+        defaults.put("redis.host", "localhost");
+        defaults.put("redis.port", 6379);
+        defaults.put("redis.user", "user");
+        defaults.put("redis.pass", "password");
         return defaults;
-    }
-
-    public ServerInfo getServer(String server) {
-        return this.serverInfo.containsKey(server) ? this.serverInfo.get(server) : createServer(server);
-    }
-
-    private ServerInfo createServer(String server) {
-        ServerInfo serverInfo = new ServerInfo(server);
-        this.serverInfo.put(server, serverInfo);
-        return serverInfo;
-    }
-
-    @SuppressWarnings("UnstableApiUsage")
-    private void sendPlayerCountRequest(String server) {
-
-        if (Bukkit.getOnlinePlayers().isEmpty()) {
-            return;
-        }
-
-        ByteArrayDataOutput out = ByteStreams.newDataOutput();
-
-        try {
-            out.writeUTF("PlayerCount");
-            out.writeUTF(server);
-            Bukkit.getOnlinePlayers().iterator().next().sendPluginMessage(getPlaceholderAPI(), REDIS_CHANNEL, out.toByteArray());
-        } catch (Exception ignored) {
-        }
     }
 
     /*
      * %identifier_count/status_server%
      * */
-
     @Override
     public String onPlaceholderRequest(Player player, String params) {
 
         String[] args = params.split("_");
 
         if (args.length < 2) {
-            return "not_enough_args";
+            return "not-enough-args";
         }
 
         String server = args[1];
 
+        ServerInfo info = redisManager.getCache().get(server);
+
+        if (info == null)
+            return "invalid-server";
+
         if (args[0].equalsIgnoreCase("status")) {
-            return getServer(server).isOnline() ? "yes" : "no";
-        } else if (args[0].equalsIgnoreCase("count")) {
+            return info.isOnline() ? "yes" : "no";
+        }
+
+        if (args[0].equalsIgnoreCase("count")) {
             if (server.equalsIgnoreCase("total") || server.equalsIgnoreCase("all")) {
-                return String.valueOf(total);
+                return String.valueOf(redisManager.getTotal());
             } else
-                return String.valueOf(getServer(server).getPlayerCount());
+                return String.valueOf(info.getPlayerCount());
         }
-        return "invalid_server";
-    }
-
-    private void sendUpdateRequests() {
-        sendPlayerCountRequest("ALL");
-
-        for (String server : serverInfo.keySet()) {
-            sendPlayerCountRequest(server);
-            serverStatus.sendServerStatusRequest(server);
-        }
-    }
-
-    @Override
-    public void start() {
-        this.task = new BukkitRunnable() {
-            @Override
-            public void run() {
-                sendUpdateRequests();
-            }
-        }.runTaskTimer(getPlaceholderAPI(), 100L, 20L * FETCH_INTERVAL);
-    }
-
-    @Override
-    public void stop() {
-        if (task != null) {
-            try {
-                task.cancel();
-            } catch (Exception ignored) {
-            }
-            task = null;
-        }
+        return "invalid-params";
     }
 
     @Override
     public void clear() {
-        serverInfo.clear();
-        if (isRegistered()) {
-            unregisterChannel(REDIS_CHANNEL);
-            serverStatus.unregisterChannel();
-        }
-    }
+        redisManager.getCache().clear();
 
-    private void unregisterChannel(String channel) {
-        if (Bukkit.getMessenger().isIncomingChannelRegistered(getPlaceholderAPI(), channel)) {
-            Bukkit.getMessenger().unregisterIncomingPluginChannel(getPlaceholderAPI(), channel);
-        }
-
-        if (Bukkit.getMessenger().isOutgoingChannelRegistered(getPlaceholderAPI(), channel)) {
-            Bukkit.getMessenger().unregisterOutgoingPluginChannel(getPlaceholderAPI(), channel);
-        }
-        Bukkit.getLogger().info("Unregistered channel " + channel);
+        if (isRegistered())
+            redisManager.unregister();
     }
 
     @Override
-    public synchronized void onPluginMessageReceived(String channel, @NotNull Player player, byte[] message) {
+    public void start() {
+        redisManager.startUpdate();
+    }
 
-        if (!channel.equals(REDIS_CHANNEL)) {
-            return;
-        }
-
-        DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(message));
-
-        try {
-            String subChannel = inputStream.readUTF();
-
-            if (subChannel.equals("PlayerCount")) {
-                String server = inputStream.readUTF();
-
-                if (inputStream.available() > 0) {
-                    int count = inputStream.readInt();
-
-                    if (server.equals("ALL")) {
-                        total = count;
-                    } else {
-                        getServer(server).setPlayerCount(count);
-                    }
-                }
-            } else if (subChannel.equals("GetServers")) {
-                String[] serverList = inputStream.readUTF().split(", ");
-
-                if (serverList.length == 0) {
-                    return;
-                }
-
-                for (String server : serverList) {
-                    if (!serverInfo.containsKey(server))
-                        createServer(server);
-                }
-            }
-        } catch (Exception ignored) {
-        }
+    @Override
+    public void stop() {
+        redisManager.stopUpdate();
     }
 }

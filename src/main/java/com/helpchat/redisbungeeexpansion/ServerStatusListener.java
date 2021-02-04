@@ -7,12 +7,11 @@ import me.clip.placeholderapi.PlaceholderAPIPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageListener;
-import org.bukkit.plugin.messaging.PluginMessageListenerRegistration;
 import org.jetbrains.annotations.NotNull;
 
 public class ServerStatusListener implements PluginMessageListener {
 
-    private final static String STATUS_CHANNEL = "BungeeCord";
+    public final static String STATUS_CHANNEL = "BungeeCord";
 
     private final PlaceholderAPIPlugin plugin;
 
@@ -21,8 +20,14 @@ public class ServerStatusListener implements PluginMessageListener {
     public ServerStatusListener(RedisBungeeExpansion expansion) {
         this.plugin = expansion.getPlaceholderAPI();
         this.expansion = expansion;
+    }
 
-        registerChannel(STATUS_CHANNEL);
+    public void register() {
+        Util.registerChannel(plugin, STATUS_CHANNEL, this);
+    }
+
+    public void unregister() {
+        Util.unregisterChannel(plugin, ServerStatusListener.STATUS_CHANNEL);
     }
 
     @SuppressWarnings("UnstableApiUsage")
@@ -55,37 +60,14 @@ public class ServerStatusListener implements PluginMessageListener {
                 String server = inputStream.readUTF();
 
                 boolean state = inputStream.readBoolean();
-                expansion.getServer(server).setOnline(state);
+                ServerInfo info = expansion.getRedisManager().getCache().get(server);
+
+                if (info != null)
+                    info.setOnline(state);
             }
         } catch (Exception e) {
             Bukkit.getLogger().severe("Could not receive message: " + e.getMessage());
             e.printStackTrace();
         }
-    }
-
-    public void registerChannel(String channel) {
-        if (Bukkit.getMessenger().isIncomingChannelRegistered(plugin, channel)) {
-            Bukkit.getMessenger().unregisterIncomingPluginChannel(plugin, channel);
-        }
-
-        if (Bukkit.getMessenger().isOutgoingChannelRegistered(plugin, channel)) {
-            Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, channel);
-        }
-
-        Bukkit.getMessenger().registerOutgoingPluginChannel(plugin, channel);
-        PluginMessageListenerRegistration registration = Bukkit.getMessenger().registerIncomingPluginChannel(plugin, channel, this);
-
-        Bukkit.getLogger().info("Registered channel " + channel + " valid: " + registration.isValid() + " listener: " + registration.getListener().getClass().getSimpleName());
-    }
-
-    public void unregisterChannel() {
-        if (Bukkit.getMessenger().isIncomingChannelRegistered(plugin, STATUS_CHANNEL)) {
-            Bukkit.getMessenger().unregisterIncomingPluginChannel(plugin, STATUS_CHANNEL);
-        }
-
-        if (Bukkit.getMessenger().isOutgoingChannelRegistered(plugin, STATUS_CHANNEL)) {
-            Bukkit.getMessenger().unregisterOutgoingPluginChannel(plugin, STATUS_CHANNEL);
-        }
-        Bukkit.getLogger().info("Unregistered channel " + STATUS_CHANNEL);
     }
 }
